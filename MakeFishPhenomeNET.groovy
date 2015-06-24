@@ -14,12 +14,13 @@ import org.semanticweb.owlapi.vocab.OWLRDFVocabulary
 
 def ontfile = new File("uberon-ext.obo")
 def patofile = new File("quality.obo")
-def gofile = new File("go.obo")
+def zfafile = new File("zfa.obo")
+def gofile = new File("go-basic.obo")
 
 def id2super = [:].withDefault { new TreeSet() }
 def id2name = [:]
 def id = ""
-def zfa2uberon = [:]
+def uberon2zfa = [:]
 def values = new TreeSet()
 def attributes = new TreeSet()
 def obsolete = new TreeSet()
@@ -53,10 +54,18 @@ ontfile.eachLine { line ->
     id2name[id] = line.substring(5).trim()
   }
   if (line.startsWith("xref: ZFA:")) {
-    zfa2uberon[line.substring(5).trim()] = id
+    uberon2zfa[id] = line.substring(5).trim()
   }
 }
 gofile.eachLine { line ->
+  if (line.startsWith("id:")) {
+    id = line.substring(3).trim()
+  }
+  if (line.startsWith("name:")) {
+    id2name[id] = line.substring(5).trim()
+  }
+}
+zfafile.eachLine { line ->
   if (line.startsWith("id:")) {
     id = line.substring(3).trim()
   }
@@ -97,7 +106,7 @@ OWLDataFactory fac = manager.getOWLDataFactory()
 OWLDataFactory factory = fac
 
 def ontset = new TreeSet()
-OWLOntology ont = manager.loadOntologyFromOntologyDocument(ontfile)
+OWLOntology ont = manager.loadOntologyFromOntologyDocument(zfafile)
 ontset.add(ont)
 ont = manager.loadOntologyFromOntologyDocument(patofile)
 ontset.add(ont)
@@ -156,13 +165,31 @@ def addAnno = {resource, prop, cont ->
 
 def phenotypes = new HashSet()
 new File("phenotype.txt").splitEachLine("\t") { line ->
-  def e = line[6]
+  def e = line[10]
   //  def e2 = line[8]
   def q = line[12]
   Expando exp = new Expando()
   exp.e = e
   //  exp.e2 = e2
   exp.q = q
+  phenotypes.add(exp)
+}
+new File("all.files").splitEachLine("\t") { line ->
+  def e = line[4]
+  if (e.indexOf(" ")) {
+    e = e.split(" ")[0]
+  }
+  //  def e2 = line[8]
+  def q = line[7]
+  def t = line[8]
+  Expando exp = new Expando()
+  exp.e = e
+  //  exp.e2 = e2
+  exp.q = q
+  phenotypes.add(exp)
+  exp = new Expando()
+  exp.e = e
+  exp.q = t
   phenotypes.add(exp)
 }
 
@@ -175,10 +202,6 @@ def a2c = [:]
 /* Create abnormality of E classes */
 phenotypes.each { exp ->
   def e = id2class[exp.e]
-  if (exp.e.startsWith("ZFA")) {
-    e = id2class[zfa2uberon[exp.e]]
-    exp.e = zfa2uberon[exp.e]
-  }
   def q = id2class[exp.q]
 
   //  def e2 = id2class[exp.e2]
@@ -264,14 +287,15 @@ manager.addAxiom(
     r("part-of"), fac.getOWLObjectProperty(IRI.create("http://purl.obolibrary.org/obo/BFO_0000050"))))
 
 
-OWLImportsDeclaration importDecl1 = fac.getOWLImportsDeclaration(IRI.create("http://purl.obolibrary.org/obo/uberon.owl"))
+OWLImportsDeclaration importDecl1 = fac.getOWLImportsDeclaration(IRI.create("http://purl.obolibrary.org/obo/zfa.obo"))
 manager.applyChange(new AddImport(outont, importDecl1))
 importDecl1 = fac.getOWLImportsDeclaration(IRI.create("http://purl.obolibrary.org/obo/pato.owl"))
 manager.applyChange(new AddImport(outont, importDecl1))
-importDecl1 = fac.getOWLImportsDeclaration(IRI.create("http://purl.obolibrary.org/obo/go.owl"))
-manager.applyChange(new AddImport(outont, importDecl1))
+//importDecl1 = fac.getOWLImportsDeclaration(IRI.create("http://purl.obolibrary.org/obo/go/go-basic.obo"))
+//manager.applyChange(new AddImport(outont, importDecl1))
 
-
+InferredOntologyGenerator gen = new InferredOntologyGenerator(reasoner, [new InferredSubClassAxiomGenerator(), new InferredEquivalentClassAxiomGenerator()])
+//gen.fillOntology(manager, outont)
 
 manager.saveOntology(outont, IRI.create("file:"+opt.o))
 System.exit(0)

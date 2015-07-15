@@ -1,6 +1,8 @@
-@Grapes(
-  @Grab(group='net.sourceforge.owlapi', module='owlapi-distribution', version='4.1.0-RC2')
-)
+@Grapes([
+	  @Grab(group='net.sourceforge.owlapi', module='owlapi-distribution', version='4.0.1'),
+	  @Grab(group='org.semanticweb.elk', module='elk-owlapi', version='0.4.1'),
+	  @GrabConfig(systemClassLoader=true)
+	])
 
 import java.util.logging.Logger
 import org.semanticweb.owlapi.apibinding.OWLManager
@@ -166,7 +168,7 @@ def addAnno = {resource, prop, cont ->
 def phenotypes = new HashSet()
 new File("phenotype.txt").splitEachLine("\t") { line ->
   def e = line[10]
-  //  def e2 = line[8]
+  //def e2 = line[8]
   def q = line[12]
   Expando exp = new Expando()
   exp.e = e
@@ -174,14 +176,14 @@ new File("phenotype.txt").splitEachLine("\t") { line ->
   exp.q = q
   phenotypes.add(exp)
 }
-new File("all.files").splitEachLine("\t") { line ->
+new File("all_files").splitEachLine("\t") { line ->
   def e = line[4]
   if (e.indexOf(" ")) {
     e = e.split(" ")[0]
   }
   //  def e2 = line[8]
-  def q = line[7]
-  def t = line[8]
+  def q = line[6]
+  def t = line[7]
   Expando exp = new Expando()
   exp.e = e
   //  exp.e2 = e2
@@ -197,11 +199,12 @@ def count = 1 // global ID counter
 
 def edone = new HashSet()
 def e2p = [:]
-def a2b = [:]
-def a2c = [:]
 /* Create abnormality of E classes */
 phenotypes.each { exp ->
   def e = id2class[exp.e]
+  if (exp.e.startsWith("UBERON")) {
+    e = id2class[uberon2zfa[exp.e]]
+  }
   def q = id2class[exp.q]
 
   //  def e2 = id2class[exp.e2]
@@ -237,43 +240,6 @@ phenotypes.each { exp ->
 			   fac.getOWLObjectSomeValuesFrom(
 			     r("has-quality"), q)))))
     count += 1
-    def search = new LinkedList()
-    def found = false
-    if (! (exp.q in attributes)) {
-      if (id2super[exp.q]!=null) {
-	search.addAll(id2super[exp.q])
-	while (!found && search.size()>0) {
-	  def nq = search.poll()
-	  if (!(nq in attributes)) {
-	    if (id2super[nq]) {
-	      search.addAll(id2super[nq])
-	    }
-	  } else if (id2class[nq] in e2p[e]) {
-	    found = true
-	  } else {
-	    e2p[e].add(id2class[nq])
-	    cl = c("ZPO:$count")
-	    addAnno(cl,OWLRDFVocabulary.RDFS_LABEL,id2name[exp.e]+" "+id2name[nq])
-	    manager.addAxiom(outont, factory.getOWLEquivalentClassesAxiom(
-			       cl,
-			       fac.getOWLObjectSomeValuesFrom(
-				 r("has-part"),
-				 fac.getOWLObjectIntersectionOf(
-				   e,
-				   fac.getOWLObjectSomeValuesFrom(
-				     r("has-quality"), id2class[nq])))))
-	    count += 1
-	    found = true
-	  }
-	}
-      } else {
-	// println exp.q
-      }
-    }
-  }
-  if (a2b[e] == null) {
-    a2b[e] = new HashSet()
-    a2c[e] = new HashSet()
   }
 }
 
@@ -282,14 +248,14 @@ manager.addAxiom(outont, fac.getOWLTransitiveObjectPropertyAxiom(r("part-of")))
 manager.addAxiom(outont, fac.getOWLReflexiveObjectPropertyAxiom(r("has-part")))
 manager.addAxiom(outont, fac.getOWLReflexiveObjectPropertyAxiom(r("part-of")))
 
-manager.addAxiom(
+/*manager.addAxiom(
   outont, fac.getOWLEquivalentObjectPropertiesAxiom(
     r("part-of"), fac.getOWLObjectProperty(IRI.create("http://purl.obolibrary.org/obo/BFO_0000050"))))
+*/
 
-
-OWLImportsDeclaration importDecl1 = fac.getOWLImportsDeclaration(IRI.create("http://purl.obolibrary.org/obo/zfa.obo"))
+OWLImportsDeclaration importDecl1 = fac.getOWLImportsDeclaration(IRI.create("file:/tmp/zfa.obo"))
 manager.applyChange(new AddImport(outont, importDecl1))
-importDecl1 = fac.getOWLImportsDeclaration(IRI.create("http://purl.obolibrary.org/obo/pato.owl"))
+importDecl1 = fac.getOWLImportsDeclaration(IRI.create("file:/tmp/pato.obo"))
 manager.applyChange(new AddImport(outont, importDecl1))
 //importDecl1 = fac.getOWLImportsDeclaration(IRI.create("http://purl.obolibrary.org/obo/go/go-basic.obo"))
 //manager.applyChange(new AddImport(outont, importDecl1))
@@ -297,5 +263,5 @@ manager.applyChange(new AddImport(outont, importDecl1))
 InferredOntologyGenerator gen = new InferredOntologyGenerator(reasoner, [new InferredSubClassAxiomGenerator(), new InferredEquivalentClassAxiomGenerator()])
 //gen.fillOntology(manager, outont)
 
-manager.saveOntology(outont, IRI.create("file:"+opt.o))
+manager.saveOntology(outont, new OWLFunctionalSyntaxOntologyFormat(), IRI.create("file:"+opt.o))
 System.exit(0)
